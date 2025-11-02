@@ -1,0 +1,427 @@
+if not game:IsLoaded() then
+
+    game.Loaded:Wait()
+
+end
+
+if _G.AutoFarmMM2IsLoaded then return end
+
+_G.AutoFarmMM2IsLoaded = true
+
+local Player = game.Players.LocalPlayer
+
+local Players = game.Players
+
+local RunService = game:GetService("RunService")
+
+local TweenService = game:GetService("TweenService")
+
+local TeleportService = game:GetService("TeleportService")
+
+local HttpService = game:GetService("HttpService")
+
+local CoinCollectedEvent = game.ReplicatedStorage.Remotes.Gameplay.CoinCollected
+
+local RoundStartEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundStart
+
+local RoundEndEvent = game.ReplicatedStorage.Remotes.Gameplay.RoundEndFade
+
+local function ServerHop()
+
+    local placeId = game.PlaceId
+
+    local function FindAndJoinServer()
+
+        local ServerData = HttpService:JSONDecode(game:HttpGet('https://games.roblox.com/v1/games/' .. placeId .. '/servers/Public?sortOrder=Asc&limit=100'))
+
+        
+
+        for index, serverInfo in pairs(ServerData.data) do
+
+            if tonumber(serverInfo.playing) < tonumber(serverInfo.maxPlayers) then
+
+                local TargetServerId = tostring(serverInfo.id)
+
+                TeleportService:TeleportToPlaceInstance(placeId, TargetServerId, game.Players.LocalPlayer)
+
+                task.wait(2)
+
+                return
+
+            end
+
+        end
+
+    end
+
+    
+
+    while true do
+
+        pcall(FindAndJoinServer)
+
+        task.wait(2)
+
+    end
+
+end
+
+local function returncoincontaier()
+
+    for _, v in workspace:GetChildren() do
+
+        if v:FindFirstChild("CoinContainer") and v:IsA("Model") then
+
+            return v:FindFirstChild("CoinContainer")
+
+        end
+
+    end
+
+    return false
+
+end
+
+local CurrentSeason = "Halloween"
+
+local container = returncoincontaier()
+
+if container then
+
+    for _, coin in pairs(container:GetChildren()) do
+
+        local coinID = coin:GetAttribute("CoinID")
+
+        if coinID == "SnowToken" then
+
+            CurrentSeason = "Christmas"
+
+            break
+
+        end
+
+    end
+
+end
+
+local CurrentCoinType = CurrentSeason == "Halloween" and _G.Settings.CoinType or "SnowToken"
+
+if _G.Settings.AntiAfk then
+
+    local GC = getconnections or get_signal_cons
+
+    if GC then
+
+        for i,v in pairs(GC(Player.Idled)) do
+
+            if v["Disable"] then
+
+                v["Disable"](v)
+
+            elseif v["Disconnect"] then
+
+                v["Disconnect"](v)
+
+            end
+
+        end
+
+    else
+
+        local VirtualUser = game:GetService("VirtualUser")
+
+        Players.LocalPlayer.Idled:Connect(function()
+
+            VirtualUser:CaptureController()
+
+            VirtualUser:ClickButton2(Vector2.new())
+
+        end)
+
+    end
+
+end
+
+if _G.Settings.Disable3DRendering then
+
+    RunService:Set3dRenderingEnabled(false)
+
+end
+
+if _G.Settings.ImproveFps then
+
+    for _, player in pairs(Players:GetChildren()) do
+
+        if player.Character then
+
+            for _, part in pairs(player.Character:GetChildren()) do
+
+                if part:IsA("Accessory") or part.Name == "Radio" then
+
+                    part:Destroy()
+
+                end
+
+            end
+
+        end
+
+    end
+
+    
+
+    for _, player1 in pairs(Players:GetChildren()) do
+
+        player1.CharacterAdded:Connect(function(char)
+
+            for _, part in pairs(char:GetChildren()) do
+
+                if part:IsA("Accessory") or part.Name == "Radio" then
+
+                    part:Destroy()
+
+                end
+
+            end
+
+        end)
+
+    end
+
+    
+
+    Players.PlayerAdded:Connect(function(player1)
+
+        player1.CharacterAdded:Connect(function(char)
+
+            for _, part in pairs(char:GetChildren()) do
+
+                if part:IsA("Accessory") or part.Name == "Radio" then
+
+                    part:Destroy()
+
+                end
+
+            end
+
+        end)
+
+    end)
+
+end
+
+local bringpose = CFrame.new(math.random(-5, 5), -100, math.random(-5, 5))
+
+local safepart = Instance.new("Part")
+
+safepart.Anchored = true
+
+safepart.Massless = true
+
+safepart.Transparency = 1
+
+safepart.Size = Vector3.new(2048, 0.5, 2048)
+
+safepart.CFrame = bringpose * CFrame.new(0, -0.9, 0)
+
+safepart.Parent = workspace
+
+local AutofarmStarted = _G.Settings.AutoFarmToggle
+
+local AutofarmIN = _G.Settings.AutoFarmToggle
+
+local ResetWhenFullBag = _G.Settings.ResetWhenFull
+
+local AutofarmDelay = _G.Settings.Delay
+
+local ServerHopStartTime = os.time()
+
+local RoundActive = false
+
+CoinCollectedEvent.OnClientEvent:Connect(function(cointype, current, max)
+
+    AutofarmIN = true
+
+    if cointype == CurrentCoinType and tonumber(current) == tonumber(max) then
+
+        AutofarmIN = false
+
+        if ResetWhenFullBag and Player.Character then
+
+            Player.Character.Humanoid.Health = 0
+
+        end
+
+    end
+
+end)
+
+local function PcallTP(Position)
+
+    if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+
+        Player.Character.HumanoidRootPart.CFrame = Position
+
+    end
+
+end
+
+local function FindNearestCoin(container)
+
+    local coin, magn = nil, math.huge
+
+    if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then
+
+        return {coin, magn}
+
+    end
+
+    
+
+    local rootPos = Player.Character.HumanoidRootPart.Position
+
+    for _, v in pairs(container:GetChildren()) do
+
+        if v:GetAttribute("CoinID") == CurrentCoinType and v:FindFirstChild("TouchInterest") then
+
+            local dist = (rootPos - v.Position).Magnitude
+
+            if dist < magn then
+
+                coin, magn = v, dist
+
+            end
+
+        end
+
+    end
+
+    return {coin, magn}
+
+end
+
+local function CheckServerHop()
+
+    if _G.Settings.ServerhopToggle and not RoundActive then
+
+        local currentTime = os.time()
+
+        if currentTime - ServerHopStartTime >= _G.Settings.ServerhopTimer then
+
+            ServerHop()
+
+        end
+
+        
+
+        if #Players:GetPlayers() <= 1 then
+
+            ServerHop()
+
+        end
+
+    end
+
+end
+
+spawn(function()
+
+    while true do
+
+        if AutofarmStarted and AutofarmIN and Player.Character and returncoincontaier() then
+
+            local container = returncoincontaier()
+
+            if CurrentSeason == "Halloween" then
+
+                PcallTP(bringpose)
+
+                for _, v in pairs(container:GetChildren()) do
+
+                    if v:GetAttribute("CoinID") == CurrentCoinType and v:FindFirstChild("TouchInterest") then
+
+                        for i = 1,7 do
+
+                            PcallTP(v.CFrame)
+
+                            task.wait(0.03)
+
+                        end
+
+                        break
+
+                    end
+
+                end
+
+                PcallTP(bringpose)
+
+                task.wait(AutofarmDelay)
+
+            else
+
+                local coinData = FindNearestCoin(container)
+
+                if coinData[1] then
+
+                    if coinData[2] > 150 then 
+
+                        PcallTP(coinData[1].CFrame)
+
+                    else
+
+                        local tween = TweenService:Create(Player.Character.HumanoidRootPart, TweenInfo.new(coinData[2] / 20, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coinData[1].Position)})
+
+                        tween:Play()
+
+                        while coinData[1]:FindFirstChild("TouchInterest") do
+
+                            task.wait()
+
+                        end
+
+                        tween:Cancel()
+
+                    end
+
+                end
+
+            end
+
+            CheckServerHop()
+
+        else
+
+            task.wait(0.3)
+
+            CheckServerHop()
+
+        end
+
+    end
+
+end)
+
+RoundStartEvent.OnClientEvent:Connect(function()
+
+    AutofarmIN = true
+
+    RoundActive = true
+
+    if AutofarmStarted and CurrentSeason == "Halloween" and Player.Character then
+
+        Player.Character.HumanoidRootPart.CFrame = bringpose 
+
+    end
+
+end)
+
+RoundEndEvent.OnClientEvent:Connect(function()
+
+    AutofarmIN = false
+
+    RoundActive = false
+
+    CheckServerHop()
+
+end)
